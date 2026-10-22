@@ -161,6 +161,39 @@ if (REDIRECT) {
   console.log("  SKIP (no registry redirect on this platform): editor default");
 }
 
+// ── Editor: a runtime-only entry (port -1) falls back like no entry (REDIRECT) ──
+// A game run with the editor binary but no editor open writes its own entry with
+// port -1 (no editor bound). It must resolve like a miss, not dial ws://…:-1.
+if (REDIRECT) {
+  const restore = snapshotEnv();
+  const tmp = mkdtempSync(join(tmpdir(), "mcp-portcfg-"));
+  try {
+    clearPortEnv();
+    process.env[REDIRECT] = tmp;
+    const projectPath = "/__portcfg_unit__/runtime-only";
+    const entry: RegistryEntry = {
+      port: -1,
+      token_path: "",
+      pid: process.pid,
+      started_at: 1,
+      runtime_port: 6570,
+      runtime_pid: process.pid,
+      lsp_port: null,
+    };
+    mkdirSync(dirname(registryPath()), { recursive: true });
+    writeFileSync(registryPath(), JSON.stringify({ by_path: { [normalizePath(projectPath)]: entry } }));
+    const cfg = resolvePortConfig(noCli(), projectPath);
+    assert.equal(cfg.editorPort, "6550");
+    assert.equal(cfg.editorPinned, false);
+    assert.equal(cfg.editorSource, "default");
+  } finally {
+    restore();
+    rmSync(tmp, { recursive: true, force: true });
+  }
+} else {
+  console.log("  SKIP (no registry redirect on this platform): editor runtime-only entry");
+}
+
 // ── isValidPort — the shared pin predicate ───────────────────────────
 {
   for (const good of ["1", "6550", "65535", "08080"]) {

@@ -219,6 +219,34 @@ async function testNoRegistryEntryDoesNotSwap() {
   }
 }
 
+// ── Case 3b: a runtime-only entry (port -1) triggers no swap ─────────
+
+async function testRuntimeOnlyEntryDoesNotSwap() {
+  if (!REDIRECT) {
+    console.log("  SKIP (darwin: no registry path override): runtime-only no-swap");
+    return;
+  }
+  const projectPath = "/__godot_mcp_unit_test__/rediscover-runtime-only";
+  const portOld = await getDeadPort();
+  // A game run with no editor open publishes port -1 (no editor bound). Re-discovery
+  // must treat it as a miss rather than swap the editor channel to ws://…:-1.
+  writeRegistry({
+    [normalizePath(projectPath)]: makeEntry({ port: -1, token_path: "", runtime_port: 6570, lsp_port: null }),
+  });
+  const bridge = createBridge(`ws://127.0.0.1:${portOld}`, { projectPath });
+
+  try {
+    await assert.rejects(
+      bridge.call("echo", {}, 5000),
+      (err: unknown) => err instanceof BridgeError && err.code === "CONNECT_FAILED",
+      "runtime-only entry → no swap; CONNECT_FAILED propagates",
+    );
+    console.log("  PASS: a runtime-only entry (port -1) triggers no swap (CONNECT_FAILED propagates)");
+  } finally {
+    await bridge.close();
+  }
+}
+
 // ── Case 4: explicitEditorPort short-circuits re-discovery ───────────
 
 async function testExplicitEditorPortShortCircuits() {
@@ -295,9 +323,10 @@ async function main() {
   await testPortChangeSwapsAndRetries();
   await testSamePortDoesNotSwap();
   await testNoRegistryEntryDoesNotSwap();
+  await testRuntimeOnlyEntryDoesNotSwap();
   await testExplicitEditorPortShortCircuits();
   await testTtlGuardBlocksSecondRediscover();
-  console.log("All 5 bridge-rediscover tests passed.");
+  console.log("All 6 bridge-rediscover tests passed.");
 }
 
 main()

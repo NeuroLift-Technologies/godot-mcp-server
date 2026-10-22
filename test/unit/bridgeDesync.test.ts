@@ -229,6 +229,38 @@ async function testPinnedNoEntryErrors() {
   }
 }
 
+// ── Case 3b: runtime-only entry (port -1) → "no live editor", not "listening on -1" ──
+
+async function testPinnedRuntimeOnlyEntryErrors() {
+  if (!REDIRECT) {
+    console.log("  SKIP (darwin: no registry path override): pinned-runtime-only error");
+    return;
+  }
+  const projectPath = "/__godot_mcp_unit_test__/desync-runtime-only";
+  const deadPin = await getDeadPort();
+  // A game run with no editor open publishes port -1: no editor is registered.
+  writeRegistry({
+    [normalizePath(projectPath)]: makeEntry({ port: -1, token_path: "", runtime_port: 6570, lsp_port: null }),
+  });
+  const bridge = createBridge(`ws://127.0.0.1:${deadPin}`, { projectPath, explicitEditorPort: true });
+
+  try {
+    await assert.rejects(
+      bridge.call("echo", {}, 5000),
+      (err: unknown) =>
+        err instanceof BridgeError &&
+        err.code === "CONNECT_FAILED" &&
+        err.message.includes(String(deadPin)) &&
+        err.message.includes("no live editor") &&
+        !err.message.includes("-1"),
+      "a runtime-only entry reads as no live editor, never as an editor listening on -1",
+    );
+    console.log("  PASS: a pinned port with only a runtime-only entry reports no live editor");
+  } finally {
+    await bridge.close();
+  }
+}
+
 // ── Case 4: foreign server on the pin + registry mismatch → AUTH_FAILED desync ──
 
 async function testPinnedAuthMismatchErrors() {
@@ -366,11 +398,12 @@ async function main() {
   await testPinnedMatchProceeds();
   await testPinnedMismatchErrors();
   await testPinnedNoEntryErrors();
+  await testPinnedRuntimeOnlyEntryErrors();
   await testPinnedAuthMismatchErrors();
   await testPinnedAuthNoEntryErrors();
   await testPinnedAuthMatchPropagatesOriginal();
   await testUnpinnedAuthUntouched();
-  console.log("All 7 bridge-desync tests passed.");
+  console.log("All 8 bridge-desync tests passed.");
 }
 
 main()

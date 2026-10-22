@@ -55,6 +55,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The server no longer crashes at startup with `Invalid URL` (`ws://127.0.0.1:-1`) when the
+  project's registry entry was written by a game run with no editor open. That entry carries
+  editor port -1; the server now treats it like no entry, dials the default port, and finds
+  the editor when it starts. Re-discovery and the pinned-port check skip it the same way.
 - `game_start` no longer reports a game as ready when the game had already exited by the
   time the bridge read its registry entry, and the bridge now picks up a game relaunched on
   the same runtime port when no editor cleared the old entry.

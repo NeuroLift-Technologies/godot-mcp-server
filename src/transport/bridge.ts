@@ -20,7 +20,7 @@ import { createChannel, type Channel } from "./channel.js";
 import { createRuntimeConnection } from "./runtimeConnection.js";
 import { compareGodotVer, parseGodotVer } from "../shared/version.js";
 import type { GodotVer } from "../shared/version.js";
-import { lookupProject } from "../registry.js";
+import { lookupProject, usableEditorPort } from "../registry.js";
 
 // Re-exported from types.ts so the public bridge surface stays byte-stable for
 // importers of "./bridge.js".
@@ -201,10 +201,11 @@ export function createBridge(
     if (now - lastRediscoverAt < EDITOR_REDISCOVER_TTL_MS) return false;
     lastRediscoverAt = now;
     const entry = lookupProject(projectPath);
-    if (!entry) return false;
-    if (entry.port === cachedEditorPort) return false;
+    const port = entry ? usableEditorPort(entry) : null;
+    if (port == null) return false;
+    if (port === cachedEditorPort) return false;
     const oldPort = cachedEditorPort;
-    cachedEditorPort = entry.port;
+    cachedEditorPort = port;
     await editor.close();
     editor = createChannel(
       `ws://127.0.0.1:${cachedEditorPort}`,
@@ -237,7 +238,9 @@ export function createBridge(
     if (!projectPath) return undefined;
     const authFailure = original.code === "AUTH_FAILED";
     const entry = lookupProject(projectPath);
-    if (!entry) {
+    // A runtime-only entry registers no editor, so it reads as "no live editor" too.
+    const livePort = entry ? usableEditorPort(entry) : null;
+    if (livePort == null) {
       return new BridgeError(
         original.code,
         authFailure
@@ -250,15 +253,15 @@ export function createBridge(
               `or unset the pin to use registry discovery`,
       );
     }
-    if (entry.port !== cachedEditorPort) {
+    if (livePort !== cachedEditorPort) {
       return new BridgeError(
         original.code,
         authFailure
           ? `auth failed on pinned editor port ${cachedEditorPort}, but the live editor for this project is ` +
-              `listening on ${entry.port} — something else may be occupying the pinned port; launch the editor ` +
+              `listening on ${livePort} — something else may be occupying the pinned port; launch the editor ` +
               `with the same GODOT_MCP_EDITOR_PORT, or unset the pin to use discovery`
           : `editor pinned to port ${cachedEditorPort}, but the live editor for this project is listening on ` +
-              `${entry.port} — launch the editor with the same GODOT_MCP_EDITOR_PORT, or unset the pin to use discovery`,
+              `${livePort} — launch the editor with the same GODOT_MCP_EDITOR_PORT, or unset the pin to use discovery`,
       );
     }
     // Registry agrees with the pin. An auth failure here came from the real
