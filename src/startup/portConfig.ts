@@ -17,7 +17,7 @@
  * @module
  */
 import type { CliArgs } from "./cliArgs.js";
-import { lookupProject } from "../registry.js";
+import { lookupProject, usableEditorPort } from "../registry.js";
 
 /** Where a resolved value came from — surfaced in the startup observability log. */
 export type PortSource = "cli" | "env" | "discovery" | "default";
@@ -100,9 +100,12 @@ export function resolvePortConfig(cli: CliArgs, projectPath: string): ResolvedPo
     editorPinned = true;
     editorSource = "env";
   } else {
+    // A runtime-only entry (a game run with no editor open) has no editor port,
+    // so it falls through to the default exactly like a missing entry.
     const entry = lookupProject(projectPath);
-    if (entry) {
-      editorPort = String(entry.port);
+    const registeredPort = entry ? usableEditorPort(entry) : null;
+    if (registeredPort != null) {
+      editorPort = String(registeredPort);
       editorSource = "discovery";
     } else {
       editorPort = DEFAULT_EDITOR_PORT;

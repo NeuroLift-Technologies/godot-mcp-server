@@ -110,6 +110,19 @@ export function lookupProject(projectPath: string): RegistryEntry | null {
 }
 
 /**
+ * The editor port an entry advertises, or null when no editor registered one. A
+ * game run with the editor binary but no editor open writes its own entry with
+ * `port: -1` (and an empty `token_path`), so every reader of the editor port goes
+ * through this check and treats such an entry like a missing one — dialing it
+ * would build `ws://127.0.0.1:-1`.
+ */
+export function usableEditorPort(entry: RegistryEntry): number | null {
+  const port = entry.port;
+  if (!Number.isInteger(port) || port < 1 || port > 65535) return null;
+  return port;
+}
+
+/**
  * The runtime port an entry advertises, or null when the port is out of range or
  * its owning playtest process is provably dead. The runtime-port lookups (the fresh
  * file read and the watcher's cache) and the watcher's `discovered` events all go
